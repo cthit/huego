@@ -14,6 +14,7 @@ type HueConfig struct {
 	BaseUrl               string
 	MapDescription        string  `json:"map_description"`
 	LightMap              []Light `json:"lightsMap"`
+	LightBar			  BarLights `json:"barLightMap"`
 	Extra				  HueExtra  `json:"extra"`
 	GammaAuthorizationUri string
 	GammaRedirectUri      string
@@ -24,6 +25,7 @@ type HueConfig struct {
 	GammaLogoutUrl 		  string
 	Secret 				  string
 }
+
 
 type HueExtra struct {
 	TopText string `json:"topText"`
@@ -38,11 +40,35 @@ func (config *HueConfig) GetLightFromMap(id uint16) (Light, error) {
 	}
 	return Light{}, errors.New(fmt.Sprintf("No light with id %d", id))
 }
+func (config *HueConfig) GetBarLightFromMap(id uint16) (BarTopLight, error) {
+	for _, light := range config.LightBar.BarTopLights{
+		if light.Id == id {
+			return light, nil
+		}
+	}
+	return BarTopLight{}, errors.New(fmt.Sprintf("No light with id %d", id))
+}
+
+
 
 type Light struct {
 	Id uint16 `json:"id"`
 	X  uint   `json:"x"`
 	Y  uint   `json:"y"`
+}
+
+type Lightstrip struct {
+	Id uint16 `json:"id"`
+}
+
+type BarTopLight struct {
+	Id uint16 `json:"id"`
+	X  uint   `json:"x"`
+}
+ 
+type BarLights struct {
+	BarTopLights []BarTopLight `json:"barTopLights`
+	LightStrip Lightstrip `json:"lightstrip"`
 }
 
 func LoadConfigs() (*HueConfig, error) {

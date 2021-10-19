@@ -65,7 +65,23 @@ type LampWithCoordinates struct {
 	State utilities.SimpleLampData `json:"state"`
 }
 
-func GetLightsInfo(config *utilities.HueConfig) ([]LampWithCoordinates, error) {
+type LampsBarTop struct {
+	Light utilities.BarTopLight  `json:"barTopLight"`
+	State utilities.SimpleLampData `json:"state"`
+}
+
+type LampStrip struct {
+	Light utilities.Lightstrip `json:"lightstrip"`
+	State utilities.SimpleLampData `json:"state"`
+}
+
+type LightsInfo struct {
+	LampStrip *LampStrip 
+	LampsBarTop []LampsBarTop 
+	LampWithCoordinates []LampWithCoordinates 
+}
+
+func GetLightsInfo(config *utilities.HueConfig) (*LightsInfo, error) {
 	res, err := http.Get(config.BaseUrl)
 	if err != nil {
 		return nil, err
@@ -83,21 +99,44 @@ func GetLightsInfo(config *utilities.HueConfig) ([]LampWithCoordinates, error) {
 		return nil, err
 	}
 
-	var lampDatas []LampWithCoordinates
+	barTopLampsData := make([]LampsBarTop, 0)
+	var lightstripData *LampStrip
+	lampDatas := make([]LampWithCoordinates, 0)
+
 	for key, val := range lampsData.Lights {
-		id, err := strconv.Atoi(key)
+		idInt, err := strconv.Atoi(key)
 		if err != nil {
 			return nil, err
 		}
+		id := uint16(idInt)
 
-		light, err := config.GetLightFromMap(uint16(id))
+		light, err := config.GetLightFromMap(id)
 		if err == nil {
 			lampDatas = append(lampDatas, LampWithCoordinates{
 				Light: light,
 				State: val.State.Simplify(),
 			})
 		}
+		btLight, err := config.GetBarLightFromMap(id)
+		if err == nil {
+			barTopLampsData = append(barTopLampsData, LampsBarTop{
+				Light: btLight,
+				State: val.State.Simplify(),
+			})
+		}
+		
+		
+		if config.LightBar.LightStrip.Id == id {
+			lightstripData = &LampStrip {
+				Light: config.LightBar.LightStrip,
+				State: val.State.Simplify(),	
+			}
+		}
 	}
-
-	return lampDatas, nil
+	lightsInfo := LightsInfo {
+		LampStrip: lightstripData,
+		LampsBarTop: barTopLampsData,
+		LampWithCoordinates: lampDatas,
+	}
+	return &lightsInfo, nil
 }
