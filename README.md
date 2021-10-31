@@ -1,9 +1,10 @@
 # huego
 
-copy .env.exapmle to .env
+copy .env.example to .env
 
-get `GAMMA_SECRET` and `GAMMA_CLIENT_ID` from gamma at `http://localhost:3000`
-to dev against the lights in hubben you also need the `HUE_BASE_URL` and to be connected to digit network in Hubben
+create a huego cilent in gamma at `http://localhost:3000` to get `GAMMA_SECRET` and `GAMMA_CLIENT_ID` 
+
+to dev against the lights in Hubben you also need the `HUE_BASE_URL` and to be connected to digit network in Hubben
 
 ### run frontend with 
 
