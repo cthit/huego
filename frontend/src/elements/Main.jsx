@@ -5,6 +5,7 @@ import {getLights} from "../api/get.Lights.api";
 import {BrightnessBar} from "./BrightnessBar";
 import {SaturationBar} from "./SaturationBar";
 import {Light} from "./Light";
+import {LightStrip} from "./LightStrip";
 import {setAllLights} from "../api/post.AllLights.api";
 import {setLight} from "../api/post.Light.api";
 import {postGammaLogout} from "../api/post.GammaLogout";
@@ -20,6 +21,8 @@ const DEFAULT_COLOR = {
 export function Main() {
     const [color, setColor] = useColor("hex", "#ffffff")
     const [lights, setLights] = useState([])
+    const [barTopLights, setBarTopLights] = useState([])
+    const [lightstrip, setLightstrip] = useState(undefined)
     const [error, setError] = useState(undefined)
     const [texts, setTexts] = useState(undefined)
     const [gridSize, setGridSize] = useState(undefined)
@@ -33,8 +36,8 @@ export function Main() {
             } else {
                 let bigX = -1
                 let bigY = -1
-
-                setLights(response.response.data.lights.map(obj => {
+                console.log(response.response.data)
+                setLights(response.response.data.lights.LampWithCoordinates.map(obj => {                    
                     const l = obj.light
                     const s = obj.state
                     if (l.x > bigX) {
@@ -61,7 +64,36 @@ export function Main() {
                     width: bigX + 1,
                     height: bigY + 1
                 })
-
+                setBarTopLights(response.response.data.lights.LampsBarTop.map(obj => {
+                    const l = obj.barTopLight
+                    const s = obj.state
+                    return {
+                        id: l.id,
+                        x: l.x,
+                        color: {
+                            hsb: {
+                                h: s.h,
+                                s: s.s,
+                                b: s.b 
+                            }
+                        }
+                    }
+                }
+                ))
+                
+                const obj = response.response.data.lights.LampStrip;
+                const s = obj.state;
+                setLightstrip({
+                    id: obj.lightstrip.id,
+                    color: {
+                        hsb: {
+                            h: s.h,
+                            s: s.s,
+                            b: s.b 
+                        }
+                    }
+                })
+                
                 const extra = response.response.data.extra
                 if (extra) {
                     setTexts({
@@ -109,17 +141,44 @@ export function Main() {
             ) : (
             <div className="LightsContainer">
                 {
-                    texts && (
+                    texts && (<div className="Fixed"> 
                         <p className="LightText" style={{
-                           width: gridSize.width * 100
-                        }}>{texts.top}</p>
+                           width: gridSize.width * 100,
+                           margin: "0px",
+                           
+                        }}>{texts.top}</p> 
+                       
+                    {barTopLights.map((light, index) => (
+                    <button className="LightContainer" style={{
+                        left: light.x * 150 + "px",
+                        top: "-8px",
+                        width: "50px",
+                        height: "50px",
+                    }} key={index} onClick={() => {
+                        setBarTopLights(updateLight(light.id, barTopLights, color, setError))
+                    }}>
+                        <Light color={light.color}/>
+                    </button>
+                    ))}
+
+                    {
+                    <button className="LightStripContainer" style={{
+                        top: "46px",
+                        left: "12%"
+                    }} key={"strip"} onClick={() => {
+                        setLightstrip(updateLightStrip(lightstrip.id, lightstrip, color, setError))
+                    }}>
+                        <LightStrip color={lightstrip.color}/>
+                    </button>
+                    }
+                        </div>
                     )
                 }
                 <div className="Fixed">
                     {lights.map((light, index) => (
                     <button className="LightContainer" style={{
-                        left: light.x * 100 + "px",
-                        top: light.y * 100 + "px",
+                        left: light.x * 100+15 + "px",
+                        top: light.y * 100+35 + "px",
                     }} key={index} onClick={() => {
                         setLights(updateLight(light.id, lights, color, setError))
                     }}>
@@ -131,7 +190,7 @@ export function Main() {
                     texts && (
                     <p className="LightText" style={{
                         width: gridSize.width * 100,
-                        top: (gridSize.height + 1) * 100 + "px",
+                        top: (gridSize.height + 1) * 100+35 + "px",
                         position: "absolute"
                     }}>{texts.bottom}</p>
                     )
@@ -191,6 +250,31 @@ function updateLight(id, lights, color, setError) {
         return light
     })
 }
+
+function updateLightStrip(id, light, color, setError) {
+    AuthorizedApiCall(() => setLight(id, color.hsb))
+    .then(response => {
+        if (response.error) {
+            console.error("Failed to set light, error: ", response.errResponse)
+            setError("Failed to set light")
+        }
+    })
+    .catch(error => {
+        console.log("failed to set light due to error: ", error)
+        setError("Failed to set light, please reload the page and try again.")
+    })
+
+        if (light.id === id) {
+            return {
+                ...light,
+                color: color
+            }
+        }
+        return light
+    
+}
+
+
 
 function logout(setError) {
     postGammaLogout()

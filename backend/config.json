@@ -43,14 +43,15 @@
     }
   ],
   "barLightMap": {
-    "lightstrip": {
+    "lightstrip": [
+      {
         "id": 12
-    },
+    }],
     "barTopLights": [
         {
             "id": 10,
             "x": 0
-        },
+        },{
         {
             "id": 7,
             "x": 1
