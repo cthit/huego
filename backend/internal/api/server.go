@@ -1,23 +1,46 @@
 package api
 
 import (
-	"fmt"
+	"context"
+	"log"
+	"net/http"
+
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/viddem/huego/internal/api/endpoints"
 	"github.com/viddem/huego/internal/utilities"
-	"log"
-	"net/http"
+	"golang.org/x/oauth2"
 )
 
-var config *utilities.HueConfig
+var (
+	config       *utilities.HueConfig
+	oidcProvider *oidc.Provider
+	oauth2Config *oauth2.Config
+)
 
 func Init(conf *utilities.HueConfig) {
+	ctx := context.Background()
+
+	provider, err := oidc.NewProvider(ctx, conf.OIDCIssuer)
+	if err != nil {
+		log.Fatalf("Failed to initialize OIDC provider: %v", err)
+	}
+	oidcProvider = provider
+
+	oauth2Config = &oauth2.Config{
+		ClientID:     conf.OIDCClientID,
+		ClientSecret: conf.OIDCClientSecret,
+		RedirectURL:  conf.OIDCRedirectURL,
+		Endpoint:     provider.Endpoint(),
+		Scopes:       []string{oidc.ScopeOpenID, "profile"},
+	}
+
 	router := gin.Default()
 	store := cookie.NewStore([]byte(conf.Secret))
 	router.Use(sessions.Sessions("auth", store))
-	endpoints.Init(conf)
+	endpoints.Init(conf, oidcProvider, oauth2Config)
 	config = conf
 
 	v1 := router.Group("/api/")
@@ -33,7 +56,7 @@ func Init(conf *utilities.HueConfig) {
 		v1.POST("/logout", endpoints.Logout)
 	}
 
-	err := router.Run()
+	err = router.Run()
 	if err != nil {
 		log.Fatalf("Failed to start webserver due to err: %s\n", err)
 	}
@@ -42,9 +65,17 @@ func Init(conf *utilities.HueConfig) {
 func CheckAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session := sessions.Default(c)
-		token := session.Get("token")
+		idToken := session.Get("id_token")
 
-		if token == nil && token != "" {
+		if idToken == nil {
+			InitializeAuth(c)
+			return
+		}
+
+		verifier := oidcProvider.Verifier(&oidc.Config{ClientID: config.OIDCClientID})
+		_, err := verifier.Verify(context.Background(), idToken.(string))
+		if err != nil {
+			log.Printf("Invalid token: %v", err)
 			InitializeAuth(c)
 			return
 		}
@@ -52,12 +83,22 @@ func CheckAuth() gin.HandlerFunc {
 }
 
 func InitializeAuth(c *gin.Context) {
-	responseType := "response_type=code"
-	clientId := fmt.Sprintf("client_id=%s", config.GammaClientId)
-	redirectUri := fmt.Sprintf("redirect_uri=%s", config.GammaRedirectUri)
-	response := fmt.Sprintf("%s?%s&%s&%s", config.GammaAuthorizationUri, responseType, clientId, redirectUri)
+	state := generateRandomState()
+	session := sessions.Default(c)
+	session.Set("oauth_state", state)
+	session.Save()
 
-	c.Header("location", response)
-	c.String(http.StatusUnauthorized, response)
+	authURL := oauth2Config.AuthCodeURL(state)
+
+	c.Header("location", authURL)
+	c.String(http.StatusUnauthorized, authURL)
 	c.Abort()
+}
+
+func generateRandomState() string {
+	b := make([]byte, 16)
+	for i := range b {
+		b[i] = byte(65 + (i % 26)) // Simple random string
+	}
+	return string(b)
 }

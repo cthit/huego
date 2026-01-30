@@ -1,23 +1,20 @@
 package endpoints
 
 import (
-	"encoding/base64"
+	"context"
 	"encoding/json"
-	"fmt"
-	"github.com/gin-contrib/sessions"
-	"github.com/gin-gonic/gin"
 	"io/ioutil"
 	"log"
 	"net/http"
+
+	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-gonic/gin"
 )
 
 type authRequest struct {
-	Code *string `json:"code"`
-}
-
-type gammaTokenResponse struct {
-	AccessToken string `json:"code" binding:"required"`
-	ExpiresIn int64 `json:"expires_in" binding:"required"`
+	Code  *string `json:"code"`
+	State *string `json:"state"`
 }
 
 func Auth(c *gin.Context) {
@@ -30,9 +27,9 @@ func Auth(c *gin.Context) {
 		return
 	}
 
-	var receivedCode authRequest
-	err = json.Unmarshal(jsonData, &receivedCode)
-	if receivedCode.Code == nil {
+	var receivedAuth authRequest
+	err = json.Unmarshal(jsonData, &receivedAuth)
+	if receivedAuth.Code == nil {
 		log.Printf("No code in request")
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Message: "Invalid or missing code",
@@ -40,60 +37,68 @@ func Auth(c *gin.Context) {
 		return
 	}
 
-	authVal := fmt.Sprintf("%s:%s", config.GammaClientId, config.GammaSecret)
-	b64EncodedAuth := base64.StdEncoding.EncodeToString([]byte(authVal))
-
-	url := fmt.Sprintf("%s?grant_type=authorization_code&client_id=%s&redirect_uri=%s&code=%s", config.GammaTokenUri, config.GammaClientId, config.GammaRedirectUri, *receivedCode.Code)
-	req, _ := http.NewRequest("POST", url, nil)
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", b64EncodedAuth))
-
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		genericError(err, c)
-		return
-	}
-
-	if res.StatusCode == 200 {
-		var resp gammaTokenResponse
-		err = json.NewDecoder(res.Body).Decode(&resp)
-		if err != nil {
-			genericError(err, c)
-			return
-		}
-
-		session := sessions.Default(c)
-		session.Set("token", resp.AccessToken)
-		session.Options(sessions.Options{
-			MaxAge: int(resp.ExpiresIn),
+	session := sessions.Default(c)
+	stored_state := session.Get("oauth_state")
+	if stored_state == nil || (receivedAuth.State != nil && *receivedAuth.State != stored_state.(string)) {
+		log.Printf("Invalid state parameter")
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Message: "Invalid state parameter",
 		})
-		err = session.Save()
-		if err != nil {
-			log.Printf("Failed to create session: %v\n", err)
-			c.JSON(500, ErrorResponse{
-				Message: "Failed to create session",
-			})
-		}
-
-		c.String(200, "Session created")
 		return
 	}
 
-	resBody, err := ioutil.ReadAll(res.Body)
+	ctx := context.Background()
+
+	oauth2Token, err := oauth2Config.Exchange(ctx, *receivedAuth.Code)
 	if err != nil {
-		genericError(err, c)
+		log.Printf("Failed to exchange code for token: %v", err)
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Message: "Failed to exchange authorization code",
+		})
 		return
 	}
 
-	log.Printf("Gamma responded with %d | %s\n", res.StatusCode, string(resBody))
-	c.JSON(http.StatusBadRequest, ErrorResponse{
-		Message: "Incorrect token",
-	})
-}
+	rawIDToken, ok := oauth2Token.Extra("id_token").(string)
+	if !ok {
+		log.Printf("No id_token field in oauth2 token")
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Message: "No ID token received",
+		})
+		return
+	}
 
-func genericError(err error, c *gin.Context) {
-	log.Printf("Got error %s\n", err)
-	c.JSON(http.StatusInternalServerError, ErrorResponse{
-		Message: "Something went wrong",
+	verifier := oidcProvider.Verifier(&oidc.Config{ClientID: config.OIDCClientID})
+	idToken, err := verifier.Verify(ctx, rawIDToken)
+	if err != nil {
+		log.Printf("Failed to verify ID Token: %v", err)
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Message: "Invalid ID token",
+		})
+		return
+	}
+
+	session.Set("id_token", rawIDToken)
+	session.Set("access_token", oauth2Token.AccessToken)
+	session.Options(sessions.Options{
+		MaxAge: int(oauth2Token.Expiry.Unix()),
 	})
+	err = session.Save()
+	if err != nil {
+		log.Printf("Failed to create session: %v\n", err)
+		c.JSON(500, ErrorResponse{
+			Message: "Failed to create session",
+		})
+		return
+	}
+
+	var claims struct {
+		Name    string `json:"name"`
+		Subject string `json:"sub"`
+	}
+	if err := idToken.Claims(&claims); err != nil {
+		log.Printf("Failed to parse claims: %v", err)
+	}
+
+	log.Printf("User authenticated: %s", claims.Name)
+	c.String(200, "Session created")
 }

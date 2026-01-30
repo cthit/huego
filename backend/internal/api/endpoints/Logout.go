@@ -1,17 +1,18 @@
 package endpoints
 
 import (
-	"github.com/gin-contrib/sessions"
-	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
+
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-gonic/gin"
 )
 
 func Logout(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Options(sessions.Options{
-		Path:     "/api",
-		MaxAge:   -1,
+		Path:   "/api",
+		MaxAge: -1,
 	})
 	session.Clear()
 	err := session.Save()
@@ -22,6 +23,6 @@ func Logout(c *gin.Context) {
 		return
 	}
 
-	c.Header("location", config.GammaLogoutUrl)
-	c.String(http.StatusOK, "Redirect to gamma logout")
+	c.Header("location", "/")
+	c.String(http.StatusOK, "Logged out successfully")
 }
