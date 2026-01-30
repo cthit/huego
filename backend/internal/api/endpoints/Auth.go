@@ -3,7 +3,7 @@ package endpoints
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 
@@ -18,7 +18,7 @@ type authRequest struct {
 }
 
 func Auth(c *gin.Context) {
-	jsonData, err := ioutil.ReadAll(c.Request.Body)
+	jsonData, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Printf("Error: failed to read json data, err: %s\n", err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -99,6 +99,5 @@ func Auth(c *gin.Context) {
 		log.Printf("Failed to parse claims: %v", err)
 	}
 
-	log.Printf("User authenticated: %s", claims.Name)
-	c.String(200, "Session created")
+	c.String(http.StatusOK, "Session created")
 }
