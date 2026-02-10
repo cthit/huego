@@ -13,7 +13,7 @@ COPY ./public ./public
 
 RUN yarn install
 RUN yarn global add react-scripts
-RUN yarn build
+RUN NODE_OPTIONS=--openssl-legacy-provider yarn build
 
 FROM nginx:alpine
 RUN rm /etc/nginx/conf.d/*

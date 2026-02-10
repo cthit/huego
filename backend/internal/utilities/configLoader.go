@@ -4,31 +4,28 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/joho/godotenv"
 	"io/ioutil"
 	"log"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 type HueConfig struct {
-	BaseUrl               string
-	MapDescription        string  `json:"map_description"`
-	LightMap              []Light `json:"lightsMap"`
-	LightBar			  BarLights `json:"barLightMap"`
-	Extra				  HueExtra  `json:"extra"`
-	GammaAuthorizationUri string
-	GammaRedirectUri      string
-	GammaTokenUri         string
-	GammaMeUri            string
-	GammaSecret           string
-	GammaClientId         string
-	GammaLogoutUrl 		  string
-	Secret 				  string
+	BaseUrl          string
+	MapDescription   string    `json:"map_description"`
+	LightMap         []Light   `json:"lightsMap"`
+	LightBar         BarLights `json:"barLightMap"`
+	Extra            HueExtra  `json:"extra"`
+	OIDCIssuer       string
+	OIDCClientID     string
+	OIDCClientSecret string
+	OIDCRedirectURL  string
+	Secret           string
 }
 
-
 type HueExtra struct {
-	TopText string `json:"topText"`
+	TopText    string `json:"topText"`
 	BottomText string `json:"bottomText"`
 }
 
@@ -41,15 +38,13 @@ func (config *HueConfig) GetLightFromMap(id uint16) (Light, error) {
 	return Light{}, errors.New(fmt.Sprintf("No light with id %d", id))
 }
 func (config *HueConfig) GetBarLightFromMap(id uint16) (BarTopLight, error) {
-	for _, light := range config.LightBar.BarTopLights{
+	for _, light := range config.LightBar.BarTopLights {
 		if light.Id == id {
 			return light, nil
 		}
 	}
 	return BarTopLight{}, errors.New(fmt.Sprintf("No light with id %d", id))
 }
-
-
 
 type Light struct {
 	Id uint16 `json:"id"`
@@ -65,10 +60,10 @@ type BarTopLight struct {
 	Id uint16 `json:"id"`
 	X  uint   `json:"x"`
 }
- 
+
 type BarLights struct {
 	BarTopLights []BarTopLight `json:"barTopLights`
-	LightStrip Lightstrip `json:"lightstrip"`
+	LightStrip   Lightstrip    `json:"lightstrip"`
 }
 
 func LoadConfigs() (*HueConfig, error) {
@@ -85,15 +80,12 @@ func LoadConfigs() (*HueConfig, error) {
 	}
 
 	config := HueConfig{
-		BaseUrl:               loadNonEmptyString("HUE_BASE_URL"),
-		GammaAuthorizationUri: loadNonEmptyString("GAMMA_AUTHORIZATION_URI"),
-		GammaRedirectUri:      loadNonEmptyString("GAMMA_REDIRECT_URI"),
-		GammaTokenUri:         loadNonEmptyString("GAMMA_TOKEN_URI"),
-		GammaMeUri:            loadNonEmptyString("GAMMA_ME_URI"),
-		GammaSecret:           loadNonEmptyString("GAMMA_SECRET"),
-		GammaClientId:         loadNonEmptyString("GAMMA_CLIENT_ID"),
-		GammaLogoutUrl:		   loadNonEmptyString("GAMMA_LOGOUT_URL"),
-		Secret:				   loadNonEmptyString("SECRET"),
+		BaseUrl:          loadNonEmptyString("HUE_BASE_URL"),
+		OIDCIssuer:       loadNonEmptyString("OIDC_ISSUER"),
+		OIDCClientID:     loadNonEmptyString("OIDC_CLIENT_ID"),
+		OIDCClientSecret: loadNonEmptyString("OIDC_CLIENT_SECRET"),
+		OIDCRedirectURL:  loadNonEmptyString("OIDC_REDIRECT_URL"),
+		Secret:           loadNonEmptyString("SECRET"),
 	}
 
 	byteValue, _ := ioutil.ReadAll(jsonFile)
